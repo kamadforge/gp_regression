@@ -164,6 +164,7 @@ class BayesianLinear(nn.Module):
         return F.linear(input, weight, bias)
 
 
+
 class BayesianNetwork(nn.Module):
     def __init__(self):
         super().__init__()

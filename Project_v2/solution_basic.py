@@ -6,7 +6,6 @@ from sklearn.metrics import average_precision_score, roc_auc_score
 from torch import nn
 from torch.nn import functional as F
 from tqdm import trange, tqdm
-import math
 
 
 def ece(probs, labels, n_bins=30):
@@ -59,6 +58,7 @@ def load_rotated_mnist():
     The difference between MNIST and Rotated MNIST is that Rotated MNIST has
     rotated *test* images.
     '''
+
     mnist_path = "/data/rotated_mnist.npz"
     if not os.path.isfile(mnist_path):
         mnist_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data/rotated_mnist.npz")
@@ -112,77 +112,51 @@ class BayesianLayer(torch.nn.Module):
         self.output_dim = output_dim
         self.use_bias = bias
 
-        self.samples_gaussian = None
-        self.samples_gaussian_bias = None
-
-        # TODO: enter your code here (done)
-        self.prior_mu = nn.Parameter(torch.zeros(input_dim, output_dim))
-        self.prior_sigma = nn.Parameter(torch.ones(input_dim, output_dim))
-
-        self.weight_mu = nn.Parameter(torch.zeros(input_dim, output_dim))
-        #self.weight_logsigma = nn.Parameter(torch.ones(input_dim, output_dim))
-        self.weight_sigma = nn.Parameter(torch.ones(input_dim, output_dim))
+        # TODO: enter your code here
+        #self.prior_mu = ?
+        #self.prior_sigma = ?
+        #self.weight_mu = nn.?
+        #self.weight_logsigma = ?
 
         if self.use_bias:
             self.bias_mu = nn.Parameter(torch.zeros(output_dim))
-            #self.bias_logsigma = nn.Parameter(torch.zeros(output_dim))
-            self.bias_sigma = nn.Parameter(torch.zeros(output_dim))
+            self.bias_logsigma = nn.Parameter(torch.zeros(output_dim))
         else:
             self.register_parameter('bias_mu', None)
-            #self.register_parameter('bias_logsigma', None)
-            self.register_parameter('bias_sigma', None)
+            self.register_parameter('bias_logsigma', None)
+
+
+    def forward(self, inputs):
+        # TODO: enter your code here
+
+        if self.use_bias:
+            # TODO: enter your code here
+        else:
+            bias = None
+
+        # TODO: enter your code here
+        # return ?
 
 
     def kl_divergence(self):
         '''
         Computes the KL divergence between the priors and posteriors for this layer.
         '''
-        kl_loss = self._kl_divergence(self.weight_mu, self.weight_sigma)
+        kl_loss = self._kl_divergence(self.weight_mu, self.weight_logsigma)
         if self.use_bias:
-            kl_loss += self._kl_divergence(self.bias_mu, self.bias_sigma)
+            kl_loss += self._kl_divergence(self.bias_mu, self.bias_logsigma)
         return kl_loss
 
-    def log_prob(self, input, mu, sigma):
-        return (-math.log(math.sqrt(2 * math.pi))
-                - torch.log(sigma)
-                - ((input - mu) ** 2) / (2 * sigma ** 2)).sum()
 
-    def _kl_divergence(self, mu, sigma):
+    def _kl_divergence(self, mu, logsigma):
         '''
         Computes the KL divergence between one Gaussian posterior
         and the Gaussian prior.
         '''
 
-        # TODO: enter your code here (done) tochange: logsigma
-
-        # you can sample again given mu and sigma, or we keep the samples from the forward pass
-
-        # 1/sqrt(2*pi*signa^2) e^{-(x-mu)^2 / 2*sigma^2}
-
-
-        self.log_prior = self.log_prob(self.samples_gaussian, mu, sigma) + self.log_prob(self.samples_gaussian_bias, mu, sigma)
-        self.log_variational_posterior = self.log_prob(self.samples_gaussian, mu, sigma) + self.log_prob(self.samples_gaussian_bias, mu, sigma)
-
-        kl = self.log_variational_posterior - self.log_prior
-
-        # KL:
-        #sum q * log q/p
-        #log q - log p
+        # TODO: enter your code here
 
         return kl
-
-    def forward(self, inputs): #logsigma ?
-        self.samples_gaussian = torch.empty(self.input_dim, self.output_dim).normal_(mean=0,std=1)*self.weight_sigma+self.weight_mu
-
-        if self.use_bias:
-            self.samples_gaussian_bias=torch.empty(self.output_dim).normal_(mean=0, std=1)*self.bias_sigma+self.bias_mu
-        else:
-            bias = None
-
-        # TODO: enter your code here (done)
-
-
-        return F.linear(inputs, self.samples_gaussian.t(), self.samples_gaussian_bias)
 
 
 class BayesNet(torch.nn.Module):
@@ -192,48 +166,26 @@ class BayesNet(torch.nn.Module):
     '''
     def __init__(self, input_size, num_layers, width):
         super().__init__()
-        # input_layer = torch.nn.Sequential(BayesianLayer(input_size, width),
-        #                                    nn.ReLU())
-        # hidden_layers = [nn.Sequential(BayesianLayer(width, width),
-        #                             nn.ReLU()) for _ in range(num_layers)]
-        # output_layer = BayesianLayer(width, 10)
-        # layers = [input_layer, *hidden_layers, output_layer]
-        # self.net = torch.nn.Sequential(*layers)
-
-        self.l1 = BayesianLayer(input_size, width)
-        self.l2 = BayesianLayer(width, width)
-        self.l3 = BayesianLayer(width, width)
-        self.l4 = BayesianLayer(width, 10)
+        input_layer = torch.nn.Sequential(BayesianLayer(input_size, width),
+                                           nn.ReLU())
+        hidden_layers = [nn.Sequential(BayesianLayer(width, width),
+                                    nn.ReLU()) for _ in range(num_layers)]
+        output_layer = BayesianLayer(width, 10)
+        layers = [input_layer, *hidden_layers, output_layer]
+        self.net = torch.nn.Sequential(*layers)
 
 
     def forward(self, x):
-        # return self.net(x)
-
-        out = F.relu(self.l1(x))
-        out = F.relu(self.l2(out))
-        out = F.relu(self.l3(out))
-        out = self.l4(out)
-
-        return out
+        return self.net(x)
 
 
     def predict_class_probs(self, x, num_forward_passes=10):
         assert x.shape[1] == 28**2
         batch_size = x.shape[0]
 
-        # TODO: make n random forward passes (done)
+        # TODO: make n random forward passes
         # compute the categorical softmax probabilities
         # marginalize the probabilities over the n forward passes
-
-        probs=[]
-
-        for i in range(num_forward_passes):
-            prob = self.forward(x) #each output (batch_size, 10) size
-            probs.append(prob)
-
-        # probs is dims: num_forward_passes x batch_size x 10
-        probs = torch.mean(probs, dim=0) # potentially change dim
-
 
         assert probs.shape == (batch_size, 10)
         return probs
@@ -244,10 +196,6 @@ class BayesNet(torch.nn.Module):
         Computes the KL divergence loss for all layers.
         '''
         # TODO: enter your code here
-
-        kl_divergence = self.l1.kl_divergence()+self.l2.kl_divergence()+self.l3.kl_divergence()
-
-        return kl_divergence
 
 
 def train_network(model, optimizer, train_loader, num_epochs=100, pbar_update_interval=100):
@@ -265,38 +213,16 @@ def train_network(model, optimizer, train_loader, num_epochs=100, pbar_update_in
         for k, (batch_x, batch_y) in enumerate(train_loader):
             model.zero_grad()
             y_pred = model(batch_x)
-            loss = criterion(y_pred, batch_y) # tochange softmax
+            loss = criterion(y_pred, batch_y)
             if type(model) == BayesNet:
                 # BayesNet implies additional KL-loss.
                 # TODO: enter your code here
-
-                loss+=model.kl_loss()
-
-
-
-
-                dummy =1
             loss.backward()
             optimizer.step()
 
             if k % pbar_update_interval == 0:
                 acc = (model(batch_x).argmax(axis=1) == batch_y).sum().float()/(len(batch_y))
                 pbar.set_postfix(loss=loss.item(), acc=acc.item())
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def evaluate_model(model, model_type, test_loader, batch_size, extended_eval, private_test):
