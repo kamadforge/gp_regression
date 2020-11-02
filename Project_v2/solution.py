@@ -72,7 +72,7 @@ def load_rotated_mnist():
 
     return dataset_train
 
-
+###########################################################
 class Densenet(torch.nn.Module):
     '''
     Simple module implementing a feedforward neural network with
@@ -98,6 +98,7 @@ class Densenet(torch.nn.Module):
         probs = F.softmax(self.forward(x), dim=1)
         return probs
 
+############################################3
 
 class BayesianLayer(torch.nn.Module):
     '''
@@ -181,9 +182,11 @@ class BayesianLayer(torch.nn.Module):
 
         # TODO: enter your code here (done)
 
+        output = F.linear(inputs, self.samples_gaussian.t(), self.samples_gaussian_bias)
+        return output
 
-        return F.linear(inputs, self.samples_gaussian.t(), self.samples_gaussian_bias)
 
+######################
 
 class BayesNet(torch.nn.Module):
     '''
@@ -212,7 +215,8 @@ class BayesNet(torch.nn.Module):
         out = F.relu(self.l1(x))
         out = F.relu(self.l2(out))
         out = F.relu(self.l3(out))
-        out = self.l4(out)
+        out = F.softmax(self.l4(out), dim=1)
+
 
         return out
 
@@ -266,16 +270,15 @@ def train_network(model, optimizer, train_loader, num_epochs=100, pbar_update_in
             model.zero_grad()
             y_pred = model(batch_x)
             loss = criterion(y_pred, batch_y) # tochange softmax
-            if type(model) == BayesNet:
-                # BayesNet implies additional KL-loss.
-                # TODO: enter your code here
+            # print(f" crossent loss: {loss}")
+            # if type(model) == BayesNet:
+            #     # BayesNet implies additional KL-loss.
+            #     # TODO: enter your code here
+            #     print(f"kl_loss:  {model.kl_loss()}")
+            #     loss+=model.kl_loss()
 
-                loss+=model.kl_loss()
 
-
-
-
-                dummy =1
+            #    dummy =1
             loss.backward()
             optimizer.step()
 
