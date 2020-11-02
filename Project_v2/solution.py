@@ -8,6 +8,8 @@ from torch.nn import functional as F
 from tqdm import trange, tqdm
 import math
 
+# from debug import ipsh
+
 
 def ece(probs, labels, n_bins=30):
     '''
@@ -194,42 +196,38 @@ class BayesNet(torch.nn.Module):
     BayesianLayer objects.
     '''
     def __init__(self, input_size, num_layers, width):
+        # self.l1 = BayesianLayer(input_size, width)
+        # self.l2 = BayesianLayer(width, width)
+        # self.l3 = BayesianLayer(width, width)
+        # self.l4 = BayesianLayer(width, 10)
         super().__init__()
-        # input_layer = torch.nn.Sequential(BayesianLayer(input_size, width),
-        #                                    nn.ReLU())
-        # hidden_layers = [nn.Sequential(BayesianLayer(width, width),
-        #                             nn.ReLU()) for _ in range(num_layers)]
-        # output_layer = BayesianLayer(width, 10)
-        # layers = [input_layer, *hidden_layers, output_layer]
-        # self.net = torch.nn.Sequential(*layers)
-
-        self.l1 = BayesianLayer(input_size, width)
-        self.l2 = BayesianLayer(width, width)
-        self.l3 = BayesianLayer(width, width)
-        self.l4 = BayesianLayer(width, 10)
+        input_layer = torch.nn.Sequential(BayesianLayer(input_size, width),
+                                           nn.ReLU())
+        hidden_layers = [nn.Sequential(BayesianLayer(width, width),
+                                    nn.ReLU()) for _ in range(num_layers)]
+        output_layer = BayesianLayer(width, 10)
+        layers = [input_layer, *hidden_layers, output_layer]
+        self.net = torch.nn.Sequential(*layers)
 
 
     def forward(self, x):
-        # return self.net(x)
-
-        out = F.relu(self.l1(x))
-        out = F.relu(self.l2(out))
-        out = F.relu(self.l3(out))
-        out = F.softmax(self.l4(out), dim=1)
-
-
-        return out
+        # out = F.relu(self.l1(x))
+        # out = F.relu(self.l2(out))
+        # out = F.relu(self.l3(out))
+        # out = F.softmax(self.l4(out), dim=1)
+        # return out
+        return self.net(x)
 
 
     def predict_class_probs(self, x, num_forward_passes=10):
         assert x.shape[1] == 28**2
         batch_size = x.shape[0]
 
-        # TODO: make n random forward passes (done)
+        # TODO (done): make n random forward passes
         # compute the categorical softmax probabilities
         # marginalize the probabilities over the n forward passes
 
-        probs=[]
+        probs = []
 
         for i in range(num_forward_passes):
             prob = self.forward(x) #each output (batch_size, 10) size
@@ -237,7 +235,6 @@ class BayesNet(torch.nn.Module):
 
         # probs is dims: num_forward_passes x batch_size x 10
         probs = torch.mean(probs, dim=0) # potentially change dim
-
 
         assert probs.shape == (batch_size, 10)
         return probs
@@ -247,9 +244,10 @@ class BayesNet(torch.nn.Module):
         '''
         Computes the KL divergence loss for all layers.
         '''
-        # TODO: enter your code here
-
-        kl_divergence = self.l1.kl_divergence()+self.l2.kl_divergence()+self.l3.kl_divergence()
+        # TODO (done): enter your code here
+        kl_divergence = self.net[-1].kl_divergence()
+        for i in range(len(self.net) - 1):
+            kl_divergence += self.net[i][0].kl_divergence()
 
         return kl_divergence
 
@@ -285,21 +283,6 @@ def train_network(model, optimizer, train_loader, num_epochs=100, pbar_update_in
             if k % pbar_update_interval == 0:
                 acc = (model(batch_x).argmax(axis=1) == batch_y).sum().float()/(len(batch_y))
                 pbar.set_postfix(loss=loss.item(), acc=acc.item())
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 def evaluate_model(model, model_type, test_loader, batch_size, extended_eval, private_test):
@@ -394,11 +377,14 @@ def evaluate_model(model, model_type, test_loader, batch_size, extended_eval, pr
 
 
 def main(test_loader=None, private_test=False):
-    num_epochs = 100 # You might want to adjust this
-    batch_size = 128  # Try playing around with this
+    # num_epochs = 100 # You might want to adjust this
+    # batch_size = 128  # Try playing around with this
+    num_epochs = 10 # You might want to adjust this
+    batch_size = 16  # Try playing around with this
     print_interval = 100
     learning_rate = 5e-4  # Try playing around with this
     model_type = "bayesnet"  # Try changing this to "densenet" as a comparison
+    # model_type = "densenet"  # Try changing this to "densenet" as a comparison
     extended_evaluation = False  # Set this to True for additional model evaluation
 
     dataset_train = load_rotated_mnist()
