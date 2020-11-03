@@ -135,7 +135,7 @@ class BayesianLayer(torch.nn.Module):
             #self.register_parameter('bias_logsigma', None)
             self.register_parameter('bias_sigma', None)
 
-    def sigma (self, weight_sigma):
+    def sigma(self, weight_sigma):
         return torch.log1p(torch.exp(weight_sigma))
 
     def kl_divergence(self):
@@ -163,10 +163,16 @@ class BayesianLayer(torch.nn.Module):
         # you can sample again given mu and sigma, or we keep the samples from the forward pass
 
         # 1/sqrt(2*pi*signa^2) e^{-(x-mu)^2 / 2*sigma^2}
+        # ipsh()
 
+        self.log_prior = \
+            self.log_prob(self.samples_gaussian, self.prior_mu, self.sigma(self.prior_sigma)) + \
+            self.log_prob(self.samples_gaussian_bias, self.prior_mu, self.sigma(self.prior_sigma))
+        # print(f'{self.log_prior}')
 
-        self.log_prior = self.log_prob(self.samples_gaussian, mu, sigma) + self.log_prob(self.samples_gaussian_bias, mu, sigma)
-        self.log_variational_posterior = self.log_prob(self.samples_gaussian, mu, sigma) + self.log_prob(self.samples_gaussian_bias, mu, sigma)
+        self.log_variational_posterior = \
+            self.log_prob(self.samples_gaussian, mu, sigma) + \
+            self.log_prob(self.samples_gaussian_bias, mu, sigma)
 
         kl = self.log_variational_posterior - self.log_prior
 
@@ -276,15 +282,13 @@ def train_network(model, optimizer, train_loader, num_epochs=100, pbar_update_in
             model.zero_grad()
             y_pred = model(batch_x)
             loss = criterion(y_pred, batch_y) # tochange softmax
-            # print(f" crossent loss: {loss}")
-            # if type(model) == BayesNet:
-            #     # BayesNet implies additional KL-loss.
-            #     # TODO: enter your code here
-            #     print(f"kl_loss:  {model.kl_loss()}")
-            #     loss+=model.kl_loss()
+            print(f" crossent loss: {loss}")
+            if type(model) == BayesNet:
+                # BayesNet implies additional KL-loss.
+                # TODO: enter your code here
+                print(f"kl_loss:  {model.kl_loss()}")
+                loss+=model.kl_loss()
 
-
-            #    dummy =1
             loss.backward()
             optimizer.step()
 
