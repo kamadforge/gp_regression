@@ -125,16 +125,16 @@ class BayesianLayer(torch.nn.Module):
         self.prior_mu = nn.Parameter(torch.zeros(input_dim, output_dim))
         self.prior_sigma = nn.Parameter(torch.ones(input_dim, output_dim))
 
-        self.weight_mu = nn.Parameter(torch.zeros(input_dim, output_dim))
-        self.weight_logsigma = nn.Parameter(torch.ones(input_dim, output_dim))
-        # self.weight_mu = nn.Parameter(torch.zeros(input_dim, output_dim).uniform_(-0.2, 0.2))
-        # self.weight_logsigma = nn.Parameter(torch.ones(input_dim, output_dim).uniform_(-5, -4))
+        # self.weight_mu = nn.Parameter(torch.zeros(input_dim, output_dim))
+        # self.weight_logsigma = nn.Parameter(torch.ones(input_dim, output_dim))
+        self.weight_mu = nn.Parameter(torch.zeros(input_dim, output_dim).uniform_(-0.2, 0.2))
+        self.weight_logsigma = nn.Parameter(torch.ones(input_dim, output_dim).uniform_(-2, -1))
 
         if self.use_bias:
-            self.bias_mu = nn.Parameter(torch.zeros(output_dim))
-            self.bias_logsigma = nn.Parameter(torch.ones(output_dim))
-            # self.bias_mu = nn.Parameter(torch.zeros(output_dim).uniform_(-0.2, 0.2))
-            # self.bias_logsigma = nn.Parameter(torch.ones(output_dim).uniform_(-5, -4))
+            # self.bias_mu = nn.Parameter(torch.zeros(output_dim))
+            # self.bias_logsigma = nn.Parameter(torch.ones(output_dim))
+            self.bias_mu = nn.Parameter(torch.zeros(output_dim).uniform_(-0.2, 0.2))
+            self.bias_logsigma = nn.Parameter(torch.ones(output_dim).uniform_(-2, -1))
         else:
             self.register_parameter('bias_mu', None)
             self.register_parameter('bias_logsigma', None)
@@ -173,7 +173,7 @@ class BayesianLayer(torch.nn.Module):
         #sum q * log q/p
         #log q - log p
 
-        return kl # / self.samples_gaussian.shape[0] # TODO: change normalizer??
+        return kl / self.samples_gaussian.shape[0] # TODO: change normalizer??
 
     def forward(self, inputs): #logsigma ?
         samples_stdnormal = torch.empty(self.input_dim, self.output_dim).normal_(mean=0,std=1)
