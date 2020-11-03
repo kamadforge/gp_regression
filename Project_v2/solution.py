@@ -194,7 +194,6 @@ class BayesianLayer(torch.nn.Module):
         #print(output)
         return output
 
-
 ######################
 
 class BayesNet(torch.nn.Module):
@@ -226,7 +225,7 @@ class BayesNet(torch.nn.Module):
         return self.net(x)
 
 
-    def predict_class_probs(self, x, num_forward_passes=10):
+    def predict_class_probs(self, x, num_forward_passes=11):
         assert x.shape[1] == 28**2
         batch_size = x.shape[0]
 
@@ -240,8 +239,10 @@ class BayesNet(torch.nn.Module):
             prob = self.forward(x) #each output (batch_size, 10) size
             probs.append(prob)
 
+        probs_all = torch.stack([torch.Tensor(i) for i in probs])
+
         # probs is dims: num_forward_passes x batch_size x 10
-        probs = torch.mean(probs, dim=0) # potentially change dim
+        probs = torch.mean(probs_all, dim=0)
 
         assert probs.shape == (batch_size, 10)
         return probs
