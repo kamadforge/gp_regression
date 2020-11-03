@@ -119,30 +119,32 @@ class BayesianLayer(torch.nn.Module):
         self.samples_gaussian_bias = None
 
         # TODO: enter your code here (done)
-        self.prior_mu = nn.Parameter(torch.zeros(input_dim, output_dim))
-        self.prior_sigma = nn.Parameter(torch.ones(input_dim, output_dim))
+        self.prior_mu = nn.Parameter(torch.Tensor(input_dim, output_dim))
+        self.prior_sigma = nn.Parameter(torch.Tensor(input_dim, output_dim))
 
-        self.weight_mu = nn.Parameter(torch.zeros(input_dim, output_dim))
+        self.weight_mu = nn.Parameter(torch.zeros(input_dim, output_dim).uniform_(-0.2, 0.2))
         #self.weight_logsigma = nn.Parameter(torch.ones(input_dim, output_dim))
-        self.weight_sigma = nn.Parameter(torch.ones(input_dim, output_dim))
+        self.weight_sigma = nn.Parameter(torch.ones(input_dim, output_dim).uniform_(-5, -4))
 
         if self.use_bias:
-            self.bias_mu = nn.Parameter(torch.zeros(output_dim))
+            self.bias_mu = nn.Parameter(torch.zeros(output_dim).uniform_(-0.2, 0.2))
             #self.bias_logsigma = nn.Parameter(torch.zeros(output_dim))
-            self.bias_sigma = nn.Parameter(torch.zeros(output_dim))
+            self.bias_sigma = nn.Parameter(torch.zeros(output_dim).uniform_(-5, -4))
         else:
             self.register_parameter('bias_mu', None)
             #self.register_parameter('bias_logsigma', None)
             self.register_parameter('bias_sigma', None)
 
+    def sigma (self, weight_sigma):
+        return torch.log1p(torch.exp(weight_sigma))
 
     def kl_divergence(self):
         '''
         Computes the KL divergence between the priors and posteriors for this layer.
         '''
-        kl_loss = self._kl_divergence(self.weight_mu, self.weight_sigma)
+        kl_loss = self._kl_divergence(self.weight_mu, self.sigma(self.weight_sigma))
         if self.use_bias:
-            kl_loss += self._kl_divergence(self.bias_mu, self.bias_sigma)
+            kl_loss += self._kl_divergence(self.bias_mu, self.sigma(self.bias_sigma))
         return kl_loss
 
     def log_prob(self, input, mu, sigma):
@@ -175,16 +177,21 @@ class BayesianLayer(torch.nn.Module):
         return kl
 
     def forward(self, inputs): #logsigma ?
-        self.samples_gaussian = torch.empty(self.input_dim, self.output_dim).normal_(mean=0,std=1)*self.weight_sigma+self.weight_mu
+        samples_stdnormal = torch.empty(self.input_dim, self.output_dim).normal_(mean=0,std=1)
+        self.samples_gaussian = samples_stdnormal*self.sigma(self.weight_sigma)+self.weight_mu
 
         if self.use_bias:
-            self.samples_gaussian_bias=torch.empty(self.output_dim).normal_(mean=0, std=1)*self.bias_sigma+self.bias_mu
+            samples_stdnormal_bias=torch.empty(self.output_dim).normal_(mean=0, std=1)
+            self.samples_gaussian_bias=samples_stdnormal_bias*self.sigma(self.bias_sigma)+self.bias_mu
         else:
             bias = None
 
+
         # TODO: enter your code here (done)
 
+        #print(torch.mean(self.samples_gaussian))
         output = F.linear(inputs, self.samples_gaussian.t(), self.samples_gaussian_bias)
+        #print(output)
         return output
 
 
@@ -380,7 +387,7 @@ def main(test_loader=None, private_test=False):
     # num_epochs = 100 # You might want to adjust this
     # batch_size = 128  # Try playing around with this
     num_epochs = 10 # You might want to adjust this
-    batch_size = 16  # Try playing around with this
+    batch_size = 100  # Try playing around with this
     print_interval = 100
     learning_rate = 5e-4  # Try playing around with this
     model_type = "bayesnet"  # Try changing this to "densenet" as a comparison
@@ -396,6 +403,7 @@ def main(test_loader=None, private_test=False):
     elif model_type == "densenet":
         model = Densenet(input_size=784, num_layers=2, width=100)
 
+    optimizer = torch.optim.Adam(model.parameters())
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
     train_network(model, optimizer, train_loader,
                  num_epochs=num_epochs, pbar_update_interval=print_interval)
