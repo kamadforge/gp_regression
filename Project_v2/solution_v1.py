@@ -1,3 +1,6 @@
+# Your algorithm has not passed the checks - Your test ECE is 8.845-10.176 and test accuracy is 0.752 - Try to improve them!
+#changed self.log_prior
+
 import numpy as np
 import torch
 import os
