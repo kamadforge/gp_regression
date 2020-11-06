@@ -8,7 +8,7 @@ from torch.nn import functional as F
 from tqdm import trange, tqdm
 import math
 
-from debug import ipsh
+# from debug import ipsh
 
 
 def ece(probs, labels, n_bins=30):
@@ -102,7 +102,6 @@ class Densenet(torch.nn.Module):
 
 ############################################3
 
-
 class BayesianLayer(torch.nn.Module):
     '''
     Module implementing a single Bayesian feedforward layer.
@@ -128,13 +127,17 @@ class BayesianLayer(torch.nn.Module):
         # self.weight_mu = nn.Parameter(torch.zeros(input_dim, output_dim))
         # self.weight_logsigma = nn.Parameter(torch.ones(input_dim, output_dim))
         self.weight_mu = nn.Parameter(torch.zeros(input_dim, output_dim).uniform_(-0.2, 0.2))
-        self.weight_logsigma = nn.Parameter(torch.ones(input_dim, output_dim).uniform_(-2, -1))
+        self.weight_logsigma = nn.Parameter(torch.ones(input_dim, output_dim).uniform_(-5, -4))
+        # self.weight_mu = nn.Parameter(torch.zeros(input_dim, output_dim))
+        # self.weight_logsigma = nn.Parameter(torch.zeros(input_dim, output_dim))
 
         if self.use_bias:
             # self.bias_mu = nn.Parameter(torch.zeros(output_dim))
             # self.bias_logsigma = nn.Parameter(torch.ones(output_dim))
             self.bias_mu = nn.Parameter(torch.zeros(output_dim).uniform_(-0.2, 0.2))
-            self.bias_logsigma = nn.Parameter(torch.ones(output_dim).uniform_(-2, -1))
+            self.bias_logsigma = nn.Parameter(torch.ones(output_dim).uniform_(-5, -4))
+            # self.bias_mu = nn.Parameter(torch.zeros(output_dim))
+            # self.bias_logsigma = nn.Parameter(torch.zeros(output_dim))
         else:
             self.register_parameter('bias_mu', None)
             self.register_parameter('bias_logsigma', None)
@@ -278,15 +281,13 @@ def train_network(model, optimizer, train_loader, num_epochs=100, pbar_update_in
             y_pred = model(batch_x)
             loss = criterion(y_pred, batch_y) # tochange softmax
 
-
-            if type(model) == BayesNet:
-                # BayesNet implies additional KL-loss.
-                # TODO: enter your code here
-                #print(f"crossent loss: {loss} \t kl_loss:  {model.kl_loss()}")
-                loss+=model.kl_loss()
-            else:
-                print(f" crossent loss: {loss}")
-
+            # if type(model) == BayesNet:
+            #     # BayesNet implies additional KL-loss.
+            #     # TODO: enter your code here
+            #     print(f"crossent loss: {loss} \t kl_loss:  {model.kl_loss()}")
+            #     loss+=model.kl_loss()
+            # else:
+            #     print(f" crossent loss: {loss}")
 
             loss.backward()
             optimizer.step()

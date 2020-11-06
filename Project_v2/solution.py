@@ -151,9 +151,11 @@ class BayesianLayer(torch.nn.Module):
         return kl_loss
 
     def log_prob(self, input, mu, sigma):
-        return (-math.log(math.sqrt(2 * math.pi))
-                - torch.log(sigma)
-                - ((input - mu) ** 2) / (2 * sigma ** 2)).sum()
+        return (
+            - math.log(math.sqrt(2 * math.pi))
+            - torch.log(sigma)
+            - ((input - mu) ** 2) / (2 * sigma ** 2)
+        ).sum()
 
     def _kl_divergence(self, mu, sigma):
         '''
@@ -166,20 +168,12 @@ class BayesianLayer(torch.nn.Module):
         # you can sample again given mu and sigma, or we keep the samples from the forward pass
 
         # 1/sqrt(2*pi*signa^2) e^{-(x-mu)^2 / 2*sigma^2}
-        # ipsh()
 
-        self.log_prior = \
-            self.log_prob(self.samples_gaussian, self.prior_mu, self.sigma(self.prior_sigma)) + \
-            self.log_prob(self.samples_gaussian_bias, self.prior_mu, self.sigma(self.prior_sigma))
-        # print(f'{self.log_prior}')
-
-        self.log_variational_posterior = \
-            self.log_prob(self.samples_gaussian, mu, sigma) + \
-            self.log_prob(self.samples_gaussian_bias, mu, sigma)
-
+        self.log_prior = self.log_prob(self.samples_gaussian, self.prior_mu, self.sigma(self.prior_sigma))
+        self.log_variational_posterior = self.log_prob(self.samples_gaussian, mu, sigma)
         kl = self.log_variational_posterior - self.log_prior
 
-        print(f"kl: ", )
+        # print(f"kl: ", )
 
         # KL:
         #sum q * log q/p
