@@ -151,6 +151,8 @@ class BayesianLinear(nn.Module):
         if self.training or sample:
             weight = self.weight.sample()
             bias = self.bias.sample()
+            #print(weight)
+            #print(bias)
         else:
             weight = self.weight.mu
             bias = self.bias.mu
@@ -161,7 +163,12 @@ class BayesianLinear(nn.Module):
         else:
             self.log_prior, self.log_variational_posterior = 0, 0
 
-        return F.linear(input, weight, bias)
+        out = F.linear(input, weight, bias)
+        #print(torch.mean(weight))
+        print(torch.mean(bias))
+        #print(out.shape)
+        #print(out)
+        return out
 
 
 
