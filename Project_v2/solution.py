@@ -34,12 +34,14 @@ def ece(probs, labels, n_bins=30):
 
     onehot_labels = np.eye(n_classes)[labels]
 
+    #check what are the probabilities for our predictions
     predicted_class_probs = probs[range(n_examples), preds]
 
     # Use uniform bins on the range of probabilities, i.e. closed interval [0.,1.]
     bin_upper_edges = np.histogram_bin_edges([], bins=n_bins, range=(0., 1.))
     bin_upper_edges = bin_upper_edges[1:] # bin_upper_edges[0] = 0.
 
+    #to get the array of indices of the bin of each value which belongs to an array
     probs_as_bin_num = np.digitize(predicted_class_probs, bin_upper_edges)
     sums_per_bin = np.bincount(probs_as_bin_num, minlength=n_bins, weights=predicted_class_probs)
     sums_per_bin = sums_per_bin.astype(np.float32)
@@ -169,6 +171,8 @@ class BayesianLayer(torch.nn.Module):
 
         # 1/sqrt(2*pi*signa^2) e^{-(x-mu)^2 / 2*sigma^2}
 
+
+
         self.log_prior = self.log_prob(self.samples_gaussian, self.prior_mu, self.sigma(self.prior_sigma))
         self.log_variational_posterior = self.log_prob(self.samples_gaussian, mu, sigma)
         kl = self.log_variational_posterior - self.log_prior
@@ -227,7 +231,7 @@ class BayesNet(torch.nn.Module):
         # out = F.relu(self.l3(out))
         # out = F.softmax(self.l4(out), dim=1)
         # return out
-        return self.net(x)
+        return F.softmax(self.net(x), dim=1)
 
 
     def predict_class_probs(self, x, num_forward_passes=11):
@@ -310,12 +314,15 @@ def evaluate_model(model, model_type, test_loader, batch_size, extended_eval, pr
     accs_test = []
     probs = torch.tensor([])
     labels = torch.tensor([]).long()
+    i=0
     for batch_x, batch_y in test_loader:
-        pred = model.predict_class_probs(batch_x)
-        probs = torch.cat((probs, pred))
-        labels = torch.cat((labels, batch_y))
-        acc = (pred.argmax(axis=1) == batch_y).sum().float().item()/(len(batch_y))
-        accs_test.append(acc)
+        i=i+1;# print(i)
+        if i<1000:
+            pred = model.predict_class_probs(batch_x)
+            probs = torch.cat((probs, pred))
+            labels = torch.cat((labels, batch_y))
+            acc = (pred.argmax(axis=1) == batch_y).sum().float().item()/(len(batch_y))
+            accs_test.append(acc)
 
     if not private_test:
         acc_mean = np.mean(accs_test)
@@ -392,7 +399,7 @@ def evaluate_model(model, model_type, test_loader, batch_size, extended_eval, pr
 def main(test_loader=None, private_test=False):
     # num_epochs = 100 # You might want to adjust this
     # batch_size = 128  # Try playing around with this
-    num_epochs = 10 # You might want to adjust this
+    num_epochs = 3 # You might want to adjust this
     batch_size = 100  # Try playing around with this
     print_interval = 100
     learning_rate = 5e-4  # Try playing around with this
