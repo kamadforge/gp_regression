@@ -1,6 +1,3 @@
-# Your algorithm has not passed the checks - Your test ECE is 8.845-10.176 and test accuracy is 0.752 - Try to improve them!
-#changed self.log_prior
-
 import numpy as np
 import torch
 import os
@@ -124,32 +121,36 @@ class BayesianLayer(torch.nn.Module):
         self.samples_gaussian_bias = None
 
         # TODO: enter your code here (done)
-        self.prior_mu = nn.Parameter(torch.Tensor(input_dim, output_dim))
-        self.prior_sigma = nn.Parameter(torch.Tensor(input_dim, output_dim))
+        # self.prior_mu = nn.Parameter(torch.Tensor(input_dim, output_dim))
+        # self.prior_sigma = nn.Parameter(torch.Tensor(input_dim, output_dim))
+        self.prior_mu = nn.Parameter(torch.zeros(input_dim, output_dim))
+        self.prior_sigma = nn.Parameter(torch.ones(input_dim, output_dim))
 
-        self.weight_mu = nn.Parameter(torch.zeros(input_dim, output_dim).uniform_(-0.2, 0.2))
-        #self.weight_logsigma = nn.Parameter(torch.ones(input_dim, output_dim))
-        self.weight_sigma = nn.Parameter(torch.ones(input_dim, output_dim).uniform_(-5, -4))
+        # self.weight_mu = nn.Parameter(torch.zeros(input_dim, output_dim))
+        # self.weight_logsigma = nn.Parameter(torch.ones(input_dim, output_dim))
+        self.weight_mu = nn.Parameter(torch.zeros(input_dim, output_dim).uniform_(-0.1, 0.1))
+        self.weight_logsigma = nn.Parameter(torch.ones(input_dim, output_dim).uniform_(-6, -5))
+        # self.weight_mu = nn.Parameter(torch.zeros(input_dim, output_dim))
+        # self.weight_logsigma = nn.Parameter(torch.zeros(input_dim, output_dim))
 
         if self.use_bias:
-            self.bias_mu = nn.Parameter(torch.zeros(output_dim).uniform_(-0.2, 0.2))
-            #self.bias_logsigma = nn.Parameter(torch.zeros(output_dim))
-            self.bias_sigma = nn.Parameter(torch.zeros(output_dim).uniform_(-5, -4))
+            # self.bias_mu = nn.Parameter(torch.zeros(output_dim))
+            # self.bias_logsigma = nn.Parameter(torch.ones(output_dim))
+            self.bias_mu = nn.Parameter(torch.zeros(output_dim).uniform_(-0.1, -0.1))
+            self.bias_logsigma = nn.Parameter(torch.ones(output_dim).uniform_(-6, -5))
+            # self.bias_mu = nn.Parameter(torch.zeros(output_dim))
+            # self.bias_logsigma = nn.Parameter(torch.zeros(output_dim))
         else:
             self.register_parameter('bias_mu', None)
-            #self.register_parameter('bias_logsigma', None)
-            self.register_parameter('bias_sigma', None)
-
-    def sigma(self, weight_sigma):
-        return torch.log1p(torch.exp(weight_sigma))
+            self.register_parameter('bias_logsigma', None)
 
     def kl_divergence(self):
         '''
         Computes the KL divergence between the priors and posteriors for this layer.
         '''
-        kl_loss = self._kl_divergence(self.weight_mu, self.sigma(self.weight_sigma))
+        kl_loss = self._kl_divergence(self.weight_mu, self.weight_logsigma)
         if self.use_bias:
-            kl_loss += self._kl_divergence(self.bias_mu, self.sigma(self.bias_sigma))
+            kl_loss += self._kl_divergence(self.bias_mu, self.bias_logsigma)
         return kl_loss
 
     def log_prob(self, input, mu, sigma):
@@ -159,39 +160,38 @@ class BayesianLayer(torch.nn.Module):
             - ((input - mu) ** 2) / (2 * sigma ** 2)
         ).sum()
 
-    def _kl_divergence(self, mu, sigma):
+    def _kl_divergence(self, mu, logsigma):
         '''
         Computes the KL divergence between one Gaussian posterior
         and the Gaussian prior.
         '''
-
         # TODO: enter your code here (done) tochange: logsigma
-
         # you can sample again given mu and sigma, or we keep the samples from the forward pass
+        # 1/sqrt(2*pi*sigma^2) e^{-(x-mu)^2 / 2*sigma^2}
+
 
         # 1/sqrt(2*pi*signa^2) e^{-(x-mu)^2 / 2*sigma^2}
 
-
-
-        self.log_prior = self.log_prob(self.samples_gaussian, self.prior_mu, self.sigma(self.prior_sigma))
-        self.log_variational_posterior = self.log_prob(self.samples_gaussian, mu, sigma)
+        self.log_prior = self.log_prob(self.samples_gaussian, self.prior_mu, self.prior_sigma)
+        self.log_variational_posterior = self.log_prob(self.samples_gaussian, mu, torch.exp(logsigma))
         kl = self.log_variational_posterior - self.log_prior
+        # print(f'KL: {kl}; \t self.log_prior: {self.log_prior}; \t self.log_variational_posterior: {self.log_variational_posterior}')
 
-        # print(f"kl: ", )
+        #print(f"kl: ", )
 
         # KL:
         #sum q * log q/p
         #log q - log p
 
-        return kl
+        return kl / self.samples_gaussian.shape[0] # TODO: change normalizer??
 
     def forward(self, inputs): #logsigma ?
         samples_stdnormal = torch.empty(self.input_dim, self.output_dim).normal_(mean=0,std=1)
-        self.samples_gaussian = samples_stdnormal*self.sigma(self.weight_sigma)+self.weight_mu
+        self.samples_gaussian = samples_stdnormal * torch.exp(self.weight_logsigma) + self.weight_mu
 
         if self.use_bias:
-            samples_stdnormal_bias=torch.empty(self.output_dim).normal_(mean=0, std=1)
-            self.samples_gaussian_bias=samples_stdnormal_bias*self.sigma(self.bias_sigma)+self.bias_mu
+            samples_stdnormal_bias = torch.empty(self.output_dim).normal_(mean=0, std=1)
+            self.samples_gaussian_bias = samples_stdnormal_bias * torch.exp(self.bias_logsigma) + self.bias_mu
         else:
             bias = None
 
@@ -231,7 +231,9 @@ class BayesNet(torch.nn.Module):
         # out = F.relu(self.l3(out))
         # out = F.softmax(self.l4(out), dim=1)
         # return out
+
         return F.softmax(self.net(x), dim=1)
+
 
 
     def predict_class_probs(self, x, num_forward_passes=11):
@@ -285,14 +287,15 @@ def train_network(model, optimizer, train_loader, num_epochs=100, pbar_update_in
             model.zero_grad()
             y_pred = model(batch_x)
             loss = criterion(y_pred, batch_y) # tochange softmax
-
-            #print(f" crossent loss: {loss}")
-
-            # if type(model) == BayesNet:
-            #     # BayesNet implies additional KL-loss.
-            #     # TODO: enter your code here
-            #     print(f"kl_loss:  {model.kl_loss()}")
-            #     loss+=model.kl_loss()
+            '''
+            if type(model) == BayesNet:
+                # BayesNet implies additional KL-loss.
+                # TODO: enter your code here
+                print(f"crossent loss: {loss} \t kl_loss:  {model.kl_loss()}")
+                loss+=model.kl_loss()
+            else:
+                print(f" crossent loss: {loss}")
+            '''
 
             loss.backward()
             optimizer.step()
@@ -314,9 +317,10 @@ def evaluate_model(model, model_type, test_loader, batch_size, extended_eval, pr
     accs_test = []
     probs = torch.tensor([])
     labels = torch.tensor([]).long()
+
     i=0
     for batch_x, batch_y in test_loader:
-        i=i+1;# print(i)
+        #i=i+1;# print(i)
         if i<1000:
             pred = model.predict_class_probs(batch_x)
             probs = torch.cat((probs, pred))
@@ -399,7 +403,7 @@ def evaluate_model(model, model_type, test_loader, batch_size, extended_eval, pr
 def main(test_loader=None, private_test=False):
     # num_epochs = 100 # You might want to adjust this
     # batch_size = 128  # Try playing around with this
-    num_epochs = 3 # You might want to adjust this
+    num_epochs = 15 # You might want to adjust this
     batch_size = 100  # Try playing around with this
     print_interval = 100
     learning_rate = 5e-4  # Try playing around with this
