@@ -242,6 +242,7 @@ class BayesNet(torch.nn.Module):
 
         for i in range(num_forward_passes):
             prob = self.forward(x) #each output (batch_size, 10) size
+            prob = F.softmax(prob, dim=1)
             probs.append(prob)
 
         probs_all = torch.stack([torch.Tensor(i) for i in probs])
