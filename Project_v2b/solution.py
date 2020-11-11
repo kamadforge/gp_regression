@@ -126,24 +126,24 @@ class BayesianLayer(torch.nn.Module):
         # TODO: enter your code here (done)
         # self.prior_mu = nn.Parameter(torch.Tensor(input_dim, output_dim))
         # self.prior_sigma = nn.Parameter(torch.Tensor(input_dim, output_dim))
-        self.prior_mu = nn.Parameter(torch.zeros(input_dim, output_dim))
-        self.prior_sigma = nn.Parameter(torch.ones(input_dim, output_dim))
+        self.prior_mu = torch.zeros(input_dim, output_dim)
+        self.prior_sigma = torch.ones(input_dim, output_dim)
 
         # self.weight_mu = nn.Parameter(torch.zeros(input_dim, output_dim))
         # self.weight_logsigma = nn.Parameter(torch.ones(input_dim, output_dim))
         self.weight_mu = nn.Parameter(torch.zeros(input_dim, output_dim).uniform_(-0.1, 0.1))
-        self.weight_logsigma = nn.Parameter(torch.ones(input_dim, output_dim).uniform_(-6, -5))
+        self.weight_logsigma = nn.Parameter(torch.ones(input_dim, output_dim).uniform_(-4, -2))
         # self.weight_mu = nn.Parameter(torch.zeros(input_dim, output_dim))
         # self.weight_logsigma = nn.Parameter(torch.zeros(input_dim, output_dim))
 
         if self.use_bias:
             # self.bias_mu = nn.Parameter(torch.zeros(output_dim))
             # self.bias_logsigma = nn.Parameter(torch.ones(output_dim))
-            self.prior_bias_mu = nn.Parameter(torch.zeros(output_dim))
-            self.prior_bias_sigma = nn.Parameter(torch.ones(output_dim))
+            self.prior_bias_mu = torch.zeros(output_dim)
+            self.prior_bias_sigma = torch.ones(output_dim)
 
             self.bias_mu = nn.Parameter(torch.zeros(output_dim).uniform_(-0.1, -0.1))
-            self.bias_logsigma = nn.Parameter(torch.ones(output_dim).uniform_(-6, -5))
+            self.bias_logsigma = nn.Parameter(torch.ones(output_dim).uniform_(-4, -2))
             # self.bias_mu = nn.Parameter(torch.zeros(output_dim))
             # self.bias_logsigma = nn.Parameter(torch.zeros(output_dim))
         else:
@@ -304,9 +304,9 @@ def train_network(model, optimizer, train_loader, num_epochs=100, pbar_update_in
             if type(model) == BayesNet:
                 # BayesNet implies additional KL-loss.
                 # TODO: enter your code here
-                kll = 0.0001*model.kl_loss()
-                #print(f"crossent loss: {loss} \t kl_loss:  {kll}")
-                loss+=kll
+                kll = 0.001 * model.kl_loss()
+                # print(f"crossent loss: {loss} \t kl_loss:  {kll}")
+                loss += kll
             else:
                 print(f" crossent loss: {loss}")
 

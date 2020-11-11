@@ -1,3 +1,5 @@
 data/
 __pycache__/
 _venv/
+results_check.byte
+
