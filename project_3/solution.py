@@ -1,5 +1,7 @@
 import numpy as np
 from scipy.optimize import fmin_l_bfgs_b
+from sklearn.gaussian_process import GaussianProcessRegressor
+from sklearn.gaussian_process.kernels import Matern
 
 domain = np.array([[0, 5]])
 
@@ -15,6 +17,12 @@ class BO_algo():
         self.v_values = []
 
 
+
+        kernel = 0.5 * Matern(length_scale=0.5, nu=2.5)
+        self.model=GaussianProcessRegressor(kernel=kernel, random_state=0)
+
+
+
     def next_recommendation(self):
         """
         Recommend the next input to sample.
@@ -24,7 +32,10 @@ class BO_algo():
         recommendation: np.ndarray
             1 x domain.shape[0] array containing the next point to evaluate
         """
-        return self.optimize_acquisition_function(self)
+
+
+
+        return self.optimize_acquisition_function()
 
 
     def optimize_acquisition_function(self):
@@ -36,6 +47,8 @@ class BO_algo():
         x_opt: np.ndarray
             1 x domain.shape[0] array containing the point that maximize the acquisition function.
         """
+
+
 
         def objective(x):
             return -self.acquisition_function(x)
@@ -74,8 +87,18 @@ class BO_algo():
             Value of the acquisition function at x
         """
 
-        # TODO: enter your code here
-        raise NotImplementedError
+        x_1 = np.reshape(x, (-1,1))
+        mu, std = self.model.predict(x_1, return_std=True)
+
+        output = mu + 2*std
+
+        return output
+
+
+
+
+        ## TODO: enter your code here
+        #raise NotImplementedError
 
 
     def add_data_point(self, x, f, v):
@@ -91,9 +114,12 @@ class BO_algo():
         v: np.ndarray
             Model training speed
         """
-        self.x_values.append(x)
-        self.f_values.append(f)
+        self.x_values.append(x.item())
+        self.f_values.append(f.item())
         self.v_values.append(v)
+
+        self.model.fit(np.reshape(self.x_values, (-1,1)), np.array(self.f_values))
+
 
     def get_solution(self):
         """
@@ -107,7 +133,8 @@ class BO_algo():
         # iterate over all indicies where constraint is satisfied and find max objective
         max_objective = -1e3
         max_obj_index = -1
-        for idx in np.argwhere(self.v_values >= 1.2).flatten():
+
+        for idx in np.argwhere(np.array(self.v_values) >= 1.2).flatten():
             if self.f_values[idx] > max_objective:
                 max_objective = self.f_values[idx]
                 max_obj_index = idx
@@ -124,7 +151,13 @@ def check_in_domain(x):
 
 
 def f(x):
-    """Dummy objective"""
+
+    # # mapping v effectively modeled with a constant mean of 1.5 and a Matérn kernel with variance √2, lengthscale 0.5, and smootheness parameter ν=2.5.
+    # kernel = np.sqrt(2) * Matern(length_scale=0.5, nu=2.5)
+    # model_f = GaussianProcessRegressor(kernel=kernel, random_state=0)
+    # output = model_f.predict(x)
+
+    #"""Dummy objective"""
     mid_point = domain[:, 0] + 0.5 * (domain[:, 1] - domain[:, 0])
     return - np.linalg.norm(x - mid_point, 2)  # -(x - 2.5)^2
 
