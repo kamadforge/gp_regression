@@ -10,9 +10,9 @@ domain = np.array([[0, 5]])
 class BO_algo():
     def __init__(self):
         """Initializes the algorithm with a parameter configuration. """
-
-        # TODO: enter your code here
-        pass
+        self.x_values = []
+        self.f_values = []
+        self.v_values = []
 
 
     def next_recommendation(self):
@@ -24,10 +24,7 @@ class BO_algo():
         recommendation: np.ndarray
             1 x domain.shape[0] array containing the next point to evaluate
         """
-
-        # TODO: enter your code here
-        # In implementing this function, you may use optimize_acquisition_function() defined below.
-        raise NotImplementedError
+        return self.optimize_acquisition_function(self)
 
 
     def optimize_acquisition_function(self):
@@ -50,8 +47,12 @@ class BO_algo():
         for _ in range(20):
             x0 = domain[:, 0] + (domain[:, 1] - domain[:, 0]) * \
                  np.random.rand(domain.shape[0])
-            result = fmin_l_bfgs_b(objective, x0=x0, bounds=domain,
-                                   approx_grad=True)
+            result = fmin_l_bfgs_b(
+                objective,
+                x0=x0,
+                bounds=domain,
+                approx_grad=True,
+            )
             x_values.append(np.clip(result[0], *domain[0]))
             f_values.append(-result[1])
 
@@ -90,9 +91,9 @@ class BO_algo():
         v: np.ndarray
             Model training speed
         """
-
-        # TODO: enter your code here
-        raise NotImplementedError
+        self.x_values.append(x)
+        self.f_values.append(f)
+        self.v_values.append(v)
 
     def get_solution(self):
         """
@@ -103,9 +104,15 @@ class BO_algo():
         solution: np.ndarray
             1 x domain.shape[0] array containing the optimal solution of the problem
         """
+        # iterate over all indicies where constraint is satisfied and find max objective
+        max_objective = -1e3
+        max_obj_index = -1
+        for idx in np.argwhere(self.v_values >= 1.2).flatten():
+            if self.f_values[idx] > max_objective:
+                max_objective = self.f_values[idx]
+                max_obj_index = idx
 
-        # TODO: enter your code here
-        raise NotImplementedError
+        return self.x_values[max_obj_index]
 
 
 """ Toy problem to check code works as expected """
