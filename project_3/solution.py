@@ -1,12 +1,19 @@
 import numpy as np
+from scipy.stats import norm
 from scipy.optimize import fmin_l_bfgs_b
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import Matern
 
 domain = np.array([[0, 5]])
 
+# from debug import ipsh
 
 """ Solution """
+# ACQUISITION_METHOD = 'UCB'
+# ACQUISITION_METHOD = 'EI'
+ACQUISITION_METHOD = 'EI_COMBINED'
+ACQUISITION_EPS = 0.05
+BUDGET = 5
 
 
 class BO_algo():
@@ -18,8 +25,10 @@ class BO_algo():
 
 
 
-        kernel = 0.5 * Matern(length_scale=0.5, nu=2.5)
-        self.model=GaussianProcessRegressor(kernel=kernel, random_state=0)
+        kernel_f = 0.5 * Matern(length_scale=0.5, nu=2.5)
+        kernel_v = np.sqrt(2) * Matern(length_scale=0.5, nu=2.5)
+        self.model_f = GaussianProcessRegressor(kernel=kernel_f, random_state=0)
+        self.model_v = GaussianProcessRegressor(kernel=kernel_v, random_state=0)
 
 
 
@@ -88,14 +97,29 @@ class BO_algo():
         """
 
         x_1 = np.reshape(x, (-1,1))
-        mu, std = self.model.predict(x_1, return_std=True)
+        mu_f, std_f = self.model_f.predict(x_1, return_std=True)
+        mu_v, std_v = self.model_v.predict(x_1, return_std=True)
 
-        output = mu + 2*std
+        def getAlpha(mu_at_x, std_at_x, seen_obj_values):
+            if std_at_x == 0:
+                return 0
+            else:
+                if len(seen_obj_values) == 0:
+                    best_obj = 0
+                else:
+                    best_obj = seen_obj_values[np.argmax(seen_obj_values)]
+                z = (mu_at_x - best_obj - ACQUISITION_EPS) / std_at_x
+                return (mu_at_x - best_obj - ACQUISITION_EPS) * norm.cdf(z) + std_at_x * norm.pdf(z)
 
-        return output
 
-
-
+        if ACQUISITION_METHOD == 'UCB':
+            return mu_f + 2 * std_f
+        elif ACQUISITION_METHOD == 'EI':
+            return getAlpha(mu_f, std_f, self.f_values)
+        elif ACQUISITION_METHOD == 'EI_COMBINED':
+            return \
+                getAlpha(mu_f, std_f, self.f_values) + \
+                getAlpha(mu_v, std_v, self.v_values)
 
         ## TODO: enter your code here
         #raise NotImplementedError
@@ -116,9 +140,10 @@ class BO_algo():
         """
         self.x_values.append(x.item())
         self.f_values.append(f.item())
-        self.v_values.append(v)
+        self.v_values.append(v.item() - 1.5)
 
-        self.model.fit(np.reshape(self.x_values, (-1,1)), np.array(self.f_values))
+        self.model_f.fit(np.reshape(self.x_values, (-1,1)), np.array(self.f_values))
+        self.model_v.fit(np.reshape(self.x_values, (-1,1)), np.array(self.v_values))
 
 
     def get_solution(self):
@@ -134,11 +159,10 @@ class BO_algo():
         max_objective = -1e3
         max_obj_index = -1
 
-        for idx in np.argwhere(np.array(self.v_values) >= 1.2).flatten():
+        for idx in np.argwhere(np.array(self.v_values) > 1.2).flatten():
             if self.f_values[idx] > max_objective:
                 max_objective = self.f_values[idx]
                 max_obj_index = idx
-
         return self.x_values[max_obj_index]
 
 
@@ -151,8 +175,6 @@ def check_in_domain(x):
 
 
 def f(x):
-
-    # # mapping v effectively modeled with a constant mean of 1.5 and a Matérn kernel with variance √2, lengthscale 0.5, and smootheness parameter ν=2.5.
     # kernel = np.sqrt(2) * Matern(length_scale=0.5, nu=2.5)
     # model_f = GaussianProcessRegressor(kernel=kernel, random_state=0)
     # output = model_f.predict(x)
@@ -164,7 +186,7 @@ def f(x):
 
 def v(x):
     """Dummy speed"""
-    return 2.0
+    return np.array(2.0)
 
 
 def main():
@@ -172,7 +194,7 @@ def main():
     agent = BO_algo()
 
     # Loop until budget is exhausted
-    for j in range(20):
+    for j in range(BUDGET):
         # Get next recommendation
         x = agent.next_recommendation()
 
@@ -184,6 +206,7 @@ def main():
         # Obtain objective and constraint observation
         obj_val = f(x)
         cost_val = v(x)
+        print(f'Iteration #{j:02}/{BUDGET}: \t obj_val: {obj_val:.3f}, \t cost_val: {cost_val:.3f}')
         agent.add_data_point(x, obj_val, cost_val)
 
     # Validate solution
@@ -202,7 +225,7 @@ def main():
         regret = (0 - f(solution))
 
     print(f'Optimal value: 0\nProposed solution {solution}\nSolution value '
-          f'{f(solution)}\nRegret{regret}')
+          f'{f(solution)}\nRegret {regret}')
 
 
 if __name__ == "__main__":
