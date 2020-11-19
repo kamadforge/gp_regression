@@ -14,7 +14,7 @@ domain = np.array([[0, 5]])
 ACQUISITION_METHOD = 'EI_COMBINED'
 ACQUISITION_EPS = 0.05
 BUDGET = 5
-
+V_OFFSET = 0.15
 
 class BO_algo():
     def __init__(self):
@@ -23,13 +23,10 @@ class BO_algo():
         self.f_values = []
         self.v_values = []
 
-
-
         kernel_f = 0.5 * Matern(length_scale=0.5, nu=2.5)
         kernel_v = np.sqrt(2) * Matern(length_scale=0.5, nu=2.5)
-        self.model_f = GaussianProcessRegressor(kernel=kernel_f, random_state=0)
-        self.model_v = GaussianProcessRegressor(kernel=kernel_v, random_state=0)
-
+        self.model_f = GaussianProcessRegressor(kernel=kernel_f, alpha=0.15, random_state=0)
+        self.model_v = GaussianProcessRegressor(kernel=kernel_v, alpha=0.0001, random_state=0)
 
 
     def next_recommendation(self):
@@ -41,8 +38,6 @@ class BO_algo():
         recommendation: np.ndarray
             1 x domain.shape[0] array containing the next point to evaluate
         """
-
-
 
         return self.optimize_acquisition_function()
 
@@ -56,8 +51,6 @@ class BO_algo():
         x_opt: np.ndarray
             1 x domain.shape[0] array containing the point that maximize the acquisition function.
         """
-
-
 
         def objective(x):
             return -self.acquisition_function(x)
@@ -80,6 +73,7 @@ class BO_algo():
 
         ind = np.argmax(f_values)
         return np.atleast_2d(x_values[ind])
+
 
     def acquisition_function(self, x):
         """
@@ -111,18 +105,18 @@ class BO_algo():
                 z = (mu_at_x - best_obj - ACQUISITION_EPS) / std_at_x
                 return (mu_at_x - best_obj - ACQUISITION_EPS) * norm.cdf(z) + std_at_x * norm.pdf(z)
 
-
         if ACQUISITION_METHOD == 'UCB':
             return mu_f + 2 * std_f
         elif ACQUISITION_METHOD == 'EI':
             return getAlpha(mu_f, std_f, self.f_values)
         elif ACQUISITION_METHOD == 'EI_COMBINED':
+            # ipsh()
+            # return \
+            #     getAlpha(mu_f, std_f, self.f_values) + \
+            #     getAlpha(mu_v, std_v, self.v_values)
             return \
                 getAlpha(mu_f, std_f, self.f_values) + \
-                getAlpha(mu_v, std_v, self.v_values)
-
-        ## TODO: enter your code here
-        #raise NotImplementedError
+                std_v / 10
 
 
     def add_data_point(self, x, f, v):
@@ -140,7 +134,7 @@ class BO_algo():
         """
         self.x_values.append(x.item())
         self.f_values.append(f.item())
-        self.v_values.append(v.item() - 1.5)
+        self.v_values.append(v.item() - V_OFFSET)
 
         self.model_f.fit(np.reshape(self.x_values, (-1,1)), np.array(self.f_values))
         self.model_v.fit(np.reshape(self.x_values, (-1,1)), np.array(self.v_values))
@@ -159,7 +153,7 @@ class BO_algo():
         max_objective = -1e3
         max_obj_index = -1
 
-        for idx in np.argwhere(np.array(self.v_values) > 1.2).flatten():
+        for idx in np.argwhere(np.array(self.v_values) > 1.2 - V_OFFSET).flatten():
             if self.f_values[idx] > max_objective:
                 max_objective = self.f_values[idx]
                 max_obj_index = idx
