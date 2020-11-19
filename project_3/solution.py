@@ -105,6 +105,14 @@ class BO_algo():
                 z = (mu_at_x - best_obj - ACQUISITION_EPS) / std_at_x
                 return (mu_at_x - best_obj - ACQUISITION_EPS) * norm.cdf(z) + std_at_x * norm.pdf(z)
 
+        def getAlphaModified(mu_at_x, std_at_x, seen_obj_values):
+            if std_at_x == 0:
+                return 0
+            else:
+                best_obj = 1.2 - V_OFFSET
+                z = (mu_at_x - best_obj - ACQUISITION_EPS) / std_at_x
+                return norm.cdf(z)
+
         if ACQUISITION_METHOD == 'UCB':
             return mu_f + 2 * std_f
         elif ACQUISITION_METHOD == 'EI':
@@ -114,9 +122,15 @@ class BO_algo():
             # return \
             #     getAlpha(mu_f, std_f, self.f_values) + \
             #     getAlpha(mu_v, std_v, self.v_values)
+            # return \
+            #     getAlpha(mu_f, std_f, self.f_values) + \
+            #     std_v / 10
+            # print(getAlphaModified(mu_v, std_v, self.v_values))
             return \
-                getAlpha(mu_f, std_f, self.f_values) + \
-                std_v / 10
+                getAlpha(mu_f, std_f, self.f_values) * \
+                getAlphaModified(mu_v, std_v, self.v_values)
+
+
 
 
     def add_data_point(self, x, f, v):
