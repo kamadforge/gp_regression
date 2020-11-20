@@ -6,15 +6,15 @@ from sklearn.gaussian_process.kernels import Matern
 
 domain = np.array([[0, 5]])
 
-# from debug import ipsh
+from debug import ipsh
 
 """ Solution """
 # ACQUISITION_METHOD = 'UCB'
 # ACQUISITION_METHOD = 'EI'
 ACQUISITION_METHOD = 'EI_COMBINED'
 ACQUISITION_EPS = 0.05
-BUDGET = 5
-V_OFFSET = 0.15
+BUDGET = 10
+V_OFFSET = 1.5
 
 class BO_algo():
     def __init__(self):
@@ -90,11 +90,7 @@ class BO_algo():
             Value of the acquisition function at x
         """
 
-        x_1 = np.reshape(x, (-1,1))
-        mu_f, std_f = self.model_f.predict(x_1, return_std=True)
-        mu_v, std_v = self.model_v.predict(x_1, return_std=True)
-
-        def getAlpha(mu_at_x, std_at_x, seen_obj_values):
+        def computeEI(mu_at_x, std_at_x, seen_obj_values):
             if std_at_x == 0:
                 return 0
             else:
@@ -105,7 +101,7 @@ class BO_algo():
                 z = (mu_at_x - best_obj - ACQUISITION_EPS) / std_at_x
                 return (mu_at_x - best_obj - ACQUISITION_EPS) * norm.cdf(z) + std_at_x * norm.pdf(z)
 
-        def getAlphaModified(mu_at_x, std_at_x, seen_obj_values):
+        def computePI(mu_at_x, std_at_x, seen_obj_values):
             if std_at_x == 0:
                 return 0
             else:
@@ -113,24 +109,23 @@ class BO_algo():
                 z = (mu_at_x - best_obj - ACQUISITION_EPS) / std_at_x
                 return norm.cdf(z)
 
+        x_1 = np.reshape(x, (-1,1))
+        mu_f, std_f = self.model_f.predict(x_1, return_std=True)
+        mu_v, std_v = self.model_v.predict(x_1, return_std=True)
+        ei_f = computeEI(mu_f, std_f, self.f_values)
+        pi_v = computePI(mu_v, std_v, self.v_values)
+
+        assert 0 <= pi_v <= 1, f'[ERROR] pi_v: {pi_v} not in range [0,1]'
+
         if ACQUISITION_METHOD == 'UCB':
             return mu_f + 2 * std_f
         elif ACQUISITION_METHOD == 'EI':
-            return getAlpha(mu_f, std_f, self.f_values)
+            return ei_f
         elif ACQUISITION_METHOD == 'EI_COMBINED':
-            # ipsh()
-            # return \
-            #     getAlpha(mu_f, std_f, self.f_values) + \
-            #     getAlpha(mu_v, std_v, self.v_values)
-            # return \
-            #     getAlpha(mu_f, std_f, self.f_values) + \
-            #     std_v / 10
-            # print(getAlphaModified(mu_v, std_v, self.v_values))
-            return \
-                getAlpha(mu_f, std_f, self.f_values) * \
-                getAlphaModified(mu_v, std_v, self.v_values)
-
-
+            # return pi_v + ei_f
+            # return pi_v * ei_f
+            return 0 if pi_v < 0.5 else pi_v * ei_f
+            return pi_v if pi_v < 0.5 else pi_v * ei_f
 
 
     def add_data_point(self, x, f, v):
