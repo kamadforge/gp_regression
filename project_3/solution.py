@@ -124,7 +124,7 @@ class BO_algo():
         elif ACQUISITION_METHOD == 'EI_COMBINED':
             # return pi_v + ei_f
             # return pi_v * ei_f
-            return 0 if pi_v < 0.5 else pi_v * ei_f
+            # return 0 if pi_v < 0.5 else pi_v * ei_f
             return pi_v if pi_v < 0.5 else pi_v * ei_f
 
 
