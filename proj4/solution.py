@@ -112,9 +112,9 @@ class MLPActorCritic(nn.Module):
 
         value = self.v(state)
 
-        c = Categorical(actions)
+        c = Categorical(logits=actions[0].logits)
 
-        with torch.no_grad:
+        with torch.no_grad():
             action = c.sample()
             action_logprob = c.log_prob(action)
 
@@ -165,7 +165,9 @@ class VPGBuffer:
         certain state, or 0 if trajectory ended uninterrupted
         """
         path_slice = slice(self.path_start_idx, self.ptr)
+        print(type(last_val))
         rews = np.append(self.rew_buf[path_slice], last_val)
+        #print(rews)
         vals = np.append(self.val_buf[path_slice], last_val)
 
         # TODO: Implement TD residual calculation.
@@ -180,7 +182,7 @@ class VPGBuffer:
         self.path_start_idx = self.ptr
 
         #rews[1:]-rews[:-1] # ????
-        self.ret_buf[path_slice]= discount_cumsum(rews, self.gamma)
+        self.ret_buf[path_slice]= discount_cumsum(rews[1:], self.gamma)
 
 
     def get(self):
@@ -192,7 +194,7 @@ class VPGBuffer:
         self.ptr, self.path_start_idx = 0, 0
 
         # TODO: Normalize the TD-residuals in self.tdres_buf
-        self.tdres_buf = self.tdres_buf/torch.sum(self.tdres_buf)
+        self.tdres_buf = (self.tdres_buf - np.mean(self.tdres_buf)) / np.std(self.tdres_buf)
 
         data = dict(obs=self.obs_buf, act=self.act_buf, ret=self.ret_buf,
                     tdres=self.tdres_buf, logp=self.logp_buf)
@@ -254,7 +256,7 @@ class Agent:
             for t in range(steps_per_epoch):
                 a, v, logp = self.ac.step(torch.as_tensor(state, dtype=torch.float32))
 
-                next_state, r, terminal = self.env.transition(a)
+                next_state, r, terminal = self.env.transition(a.detach().cpu().numpy())
                 ep_ret += r
                 ep_len += 1
 
@@ -271,6 +273,7 @@ class Agent:
                     # if trajectory didn't reach terminal state, bootstrap value target
                     if epoch_ended:
                         _, v, _ = self.ac.step(torch.as_tensor(state, dtype=torch.float32))
+                        v=v.detach().cpu().numpy()
                     else:
                         v = 0
                     if timeout or terminal:
@@ -283,15 +286,15 @@ class Agent:
 
             # This is the end of an epoch, so here is where you likely want to update
             # the policy and / or value function.
-            # TODO: Implement the polcy and value function update. Hint: some of the torch code is
+            # TODO: Implement the policy and value function update. Hint: some of the torch code is
             # done for you.
 
             data = buf.get()
 
             #Do 1 policy gradient update
             pi_optimizer.zero_grad() #reset the gradient in the policy optimizer
-            loss = -data.logp * data.tdres
-            loss.backwards()
+            loss = -torch.sum(data['logp'] * data['tdres'])
+            loss.backward()
             pi_optimizer.step()
 
             #Hint: you need to compute a 'loss' such that its derivative with respect to the policy
@@ -306,7 +309,7 @@ class Agent:
 
                 v_optimizer.zero_grad()
 
-                loss=mse_loss(data.ret, values)
+                loss=mse_loss(data.ret, buf.val_buf)
                 #compute a loss for the value function, call loss.backwards() and then
                 loss.backwards()
                 v_optimizer.step()
@@ -326,7 +329,7 @@ class Agent:
         # Currently, this just returns a random action.
 
         actions = self.ac.pi(obs)
-        c = Categorical(actions)
+        c = Categorical(logits=actions[0].logits)
 
         return c.sample()
 
