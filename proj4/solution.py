@@ -93,6 +93,8 @@ class MLPActorCritic(nn.Module):
         # Build value function
         self.v  = MLPCritic(obs_dim, hidden_sizes, activation)
 
+        dummy=0
+
     def step(self, state):
         """
         Take an state and return action, value function, and log-likelihood
@@ -105,7 +107,18 @@ class MLPActorCritic(nn.Module):
         #    3. The log-probability of the action under the policy output distribution
         # Hint: This function is only called during inference. You should use
         # `torch.no_grad` to ensure that it does not interfer with the gradient computation.
-        return 0, 0, 0
+
+        actions = self.pi(state)
+
+        value = self.v(state)
+
+        c = Categorical(actions)
+
+        with torch.no_grad:
+            action = c.sample()
+            action_logprob = c.log_prob(action)
+
+        return action, value, action_logprob
 
     def act(self, state):
         return self.step(state)[0]
@@ -159,12 +172,15 @@ class VPGBuffer:
         # Hint: we do the discounting for you, you just need to compute 'deltas'.
         # see the handout for more info
         # deltas = rews[:-1] + ...
-        deltas = rews[:-1]
+        deltas = rews[:-1]+vals[1:]-vals[:-1]
         self.tdres_buf[path_slice] = discount_cumsum(deltas, self.gamma*self.lam)
 
         #TODO: compute the discounted rewards-to-go. Hint: use the discount_cumsum function
 
         self.path_start_idx = self.ptr
+
+        #rews[1:]-rews[:-1] # ????
+        self.ret_buf[path_slice]= discount_cumsum(rews, self.gamma)
 
 
     def get(self):
@@ -297,7 +313,11 @@ class Agent:
         """
         # TODO: Implement this function.
         # Currently, this just returns a random action.
-        return np.random.choice([0, 1, 2, 3])
+
+        actions = self.ac.pi(obs)
+        c = Categorical(actions)
+
+        return c.sample()
 
 
 def main():
