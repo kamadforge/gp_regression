@@ -10,6 +10,7 @@ import torch
 from torch.optim import Adam
 import torch.nn as nn
 from torch.distributions.categorical import Categorical
+#torch.autograd.set_detect_anomaly(True)
 
 def discount_cumsum(x, discount):
     """
@@ -114,9 +115,9 @@ class MLPActorCritic(nn.Module):
 
         c = Categorical(logits=actions[0].logits)
 
-        with torch.no_grad():
-            action = c.sample()
-            action_logprob = c.log_prob(action)
+        #with torch.no_grad():
+        action = c.sample()
+        action_logprob = c.log_prob(action)
 
         return action, value, action_logprob
 
@@ -137,10 +138,13 @@ class VPGBuffer:
         self.rew_buf = np.zeros(size, dtype=np.float32)
         # trajectory's remaining return
         self.ret_buf = np.zeros(size, dtype=np.float32)
+        self.rets=[]
         # values predicted
         self.val_buf = np.zeros(size, dtype=np.float32)
+        self.values=[]
         # log probabilities of chosen actions under behavior policy
         self.logp_buf = np.zeros(size, dtype=np.float32)
+        self.logps = []
         self.gamma = gamma
         self.lam = lam
         self.ptr, self.path_start_idx, self.max_size = 0, 0, size
@@ -156,7 +160,9 @@ class VPGBuffer:
         self.act_buf[self.ptr] = act
         self.rew_buf[self.ptr] = rew
         self.val_buf[self.ptr] = val
+        self.values.append(val)
         self.logp_buf[self.ptr] = logp
+        self.logps.append(logp)
         self.ptr += 1
 
     def end_traj(self, last_val=0):
@@ -166,15 +172,21 @@ class VPGBuffer:
         """
         path_slice = slice(self.path_start_idx, self.ptr)
         print(type(last_val))
-        rews = np.append(self.rew_buf[path_slice], last_val)
+        if type(last_val) is not int:
+            lv = last_val.item()
+        else:
+            lv = last_val
+        rews = np.append(self.rew_buf[path_slice], lv)
         #print(rews)
-        vals = np.append(self.val_buf[path_slice], last_val)
+        vals = np.append(self.val_buf[path_slice], lv)
 
         # TODO: Implement TD residual calculation.
         # Hint: we do the discounting for you, you just need to compute 'deltas'.
         # see the handout for more info
         # deltas = rews[:-1] + ...
         deltas = rews[:-1]+vals[1:]-vals[:-1]
+        print(deltas.shape)
+        print(path_slice)
         self.tdres_buf[path_slice] = discount_cumsum(deltas, self.gamma*self.lam)
 
         #TODO: compute the discounted rewards-to-go. Hint: use the discount_cumsum function
@@ -255,8 +267,7 @@ class Agent:
             ep_returns = []
             for t in range(steps_per_epoch):
                 a, v, logp = self.ac.step(torch.as_tensor(state, dtype=torch.float32))
-
-                next_state, r, terminal = self.env.transition(a.detach().cpu().numpy())
+                next_state, r, terminal = self.env.transition(a.numpy())
                 ep_ret += r
                 ep_len += 1
 
@@ -273,7 +284,6 @@ class Agent:
                     # if trajectory didn't reach terminal state, bootstrap value target
                     if epoch_ended:
                         _, v, _ = self.ac.step(torch.as_tensor(state, dtype=torch.float32))
-                        v=v.detach().cpu().numpy()
                     else:
                         v = 0
                     if timeout or terminal:
@@ -291,10 +301,17 @@ class Agent:
 
             data = buf.get()
 
+            for name, param in self.ac.named_parameters():
+                print(name, param.requires_grad)
+
             #Do 1 policy gradient update
             pi_optimizer.zero_grad() #reset the gradient in the policy optimizer
-            loss = -torch.sum(data['logp'] * data['tdres'])
-            loss.backward()
+            policy_loss=[]
+            for log_p, rew in zip(buf.logps, data['tdres']):
+                policy_loss.append((-log_p*rew).unsqueeze(0))
+            #loss = -torch.sum(buf.logp_buf-buf.tdres_buf)
+            policy_loss = torch.cat(policy_loss).sum()
+            policy_loss.backward(retain_graph=True)
             pi_optimizer.step()
 
             #Hint: you need to compute a 'loss' such that its derivative with respect to the policy
@@ -304,14 +321,14 @@ class Agent:
             #             tdres=self.tdres_buf, logp=self.logp_buf)
 
             #We suggest to do 100 iterations of value function updates
-            mse_loss=torch.nn.MSE()
-            for _ in range(100):
+            mse_loss=torch.nn.MSELoss()
+            for i in range(100):
 
                 v_optimizer.zero_grad()
 
-                loss=mse_loss(data.ret, buf.val_buf)
+                loss=mse_loss(data['ret'][i], buf.values[i]) #data['ret'][i]
                 #compute a loss for the value function, call loss.backwards() and then
-                loss.backwards()
+                loss.backward()
                 v_optimizer.step()
 
 
@@ -331,7 +348,7 @@ class Agent:
         actions = self.ac.pi(obs)
         c = Categorical(logits=actions[0].logits)
 
-        return c.sample()
+        return c.sample().item()
 
 
 def main():
