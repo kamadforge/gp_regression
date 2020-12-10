@@ -192,7 +192,7 @@ class VPGBuffer:
         self.ptr, self.path_start_idx = 0, 0
 
         # TODO: Normalize the TD-residuals in self.tdres_buf
-        self.tdres_buf = self.tdres_buf
+        self.tdres_buf = self.tdres_buf/torch.sum(self.tdres_buf)
 
         data = dict(obs=self.obs_buf, act=self.act_buf, ret=self.ret_buf,
                     tdres=self.tdres_buf, logp=self.logp_buf)
@@ -290,15 +290,26 @@ class Agent:
 
             #Do 1 policy gradient update
             pi_optimizer.zero_grad() #reset the gradient in the policy optimizer
+            loss = -data.logp * data.tdres
+            loss.backwards()
+            pi_optimizer.step()
 
             #Hint: you need to compute a 'loss' such that its derivative with respect to the policy
             #parameters is the policy gradient. Then call loss.backwards() and pi_optimizer.step()
 
+            # data = dict(obs=self.obs_buf, act=self.act_buf, ret=self.ret_buf,
+            #             tdres=self.tdres_buf, logp=self.logp_buf)
+
             #We suggest to do 100 iterations of value function updates
+            mse_loss=torch.nn.MSE()
             for _ in range(100):
+
                 v_optimizer.zero_grad()
+
+                loss=mse_loss(data.ret, values)
                 #compute a loss for the value function, call loss.backwards() and then
-                #v_optimizer.step()
+                loss.backwards()
+                v_optimizer.step()
 
 
         return True
