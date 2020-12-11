@@ -115,7 +115,8 @@ class MLPActorCritic(nn.Module):
 
         c = Categorical(logits=actions[0].logits)
 
-        #with torch.no_grad():
+#        with torch.no_grad():
+
         action = c.sample()
         action_logprob = c.log_prob(action)
 
@@ -171,7 +172,7 @@ class VPGBuffer:
         certain state, or 0 if trajectory ended uninterrupted
         """
         path_slice = slice(self.path_start_idx, self.ptr)
-        print(type(last_val))
+        #print(type(last_val))
         if type(last_val) is not int:
             lv = last_val.item()
         else:
@@ -185,8 +186,8 @@ class VPGBuffer:
         # see the handout for more info
         # deltas = rews[:-1] + ...
         deltas = rews[:-1]+vals[1:]-vals[:-1]
-        print(deltas.shape)
-        print(path_slice)
+        #print(deltas.shape)
+        #print(path_slice)
         self.tdres_buf[path_slice] = discount_cumsum(deltas, self.gamma*self.lam)
 
         #TODO: compute the discounted rewards-to-go. Hint: use the discount_cumsum function
@@ -237,9 +238,9 @@ class Agent:
         # Training parameters
         # You may wish to change the following settings for the buffer and training
         # Number of training steps per epoch
-        steps_per_epoch = 3000
+        steps_per_epoch = 300 #
         # Number of epochs to train for
-        epochs = 50
+        epochs = 3
         # The longest an episode can go on before cutting it off
         max_ep_len = 300
         # Discount factor for weighting future rewards
@@ -265,6 +266,10 @@ class Agent:
         # Main training loop: collect experience in env and update / log each epoch
         for epoch in range(epochs):
             ep_returns = []
+            values_epoch = []
+            states_epoch = []
+            rewards_epoch = []
+            logps_epoch = []
             for t in range(steps_per_epoch):
                 a, v, logp = self.ac.step(torch.as_tensor(state, dtype=torch.float32))
                 next_state, r, terminal = self.env.transition(a.numpy())
@@ -273,6 +278,10 @@ class Agent:
 
                 # Log transition
                 buf.store(state, a, r, v, logp)
+                values_epoch.append([v])
+                states_epoch.append(state)
+                rewards_epoch.append([r])
+                logps_epoch.append([logp])
 
                 # Update state (critical!)
                 state = next_state
@@ -288,6 +297,7 @@ class Agent:
                         v = 0
                     if timeout or terminal:
                         ep_returns.append(ep_ret)  # only store return when episode ended
+
                     buf.end_traj(v)
                     state, ep_ret, ep_len = self.env.reset(), 0, 0
 
@@ -304,17 +314,34 @@ class Agent:
 
             data = buf.get()
 
-            for name, param in self.ac.named_parameters():
-                print(name, param.requires_grad)
+            rewards_cum_epoch = discount_cumsum(rewards_epoch, gamma)
 
-            #Do 1 policy gradient update
-            pi_optimizer.zero_grad() #reset the gradient in the policy optimizer
-            policy_loss=[]
-            for log_p, rew in zip(buf.logps, data['tdres']):
-                policy_loss.append((-log_p*rew).unsqueeze(0))
+            v_losses=[]
+            for rew, val in zip(rewards_cum_epoch, values_epoch):
+                v_losses.append(torch.nn.functional.mse_loss(val[0], torch.as_tensor(rew[0], dtype=torch.float32), reduction='mean'))
+
+            v_optimizer.zero_grad()
+            value_loss = torch.stack(v_losses).sum()
+            # print(loss.item())
+            value_loss.backward()
+            v_optimizer.step()
+
+            ########################
+
+
+
+            #################3
+
+            policy_loss = []
+            for log_p, rew in zip(logps_epoch, data['tdres']):
+                policy_loss.append((-log_p[0]*rew))
             #loss = -torch.sum(buf.logp_buf-buf.tdres_buf)
-            policy_loss = torch.cat(policy_loss).sum()
-            policy_loss.backward(retain_graph=True)
+            policy_loss = torch.stack(policy_loss).sum()
+
+            # Do 1 policy gradient update
+            pi_optimizer.zero_grad()  # reset the gradient in the policy optimizer
+
+            policy_loss.backward()
             pi_optimizer.step()
 
             #Hint: you need to compute a 'loss' such that its derivative with respect to the policy
@@ -324,51 +351,56 @@ class Agent:
             #             tdres=self.tdres_buf, logp=self.logp_buf)
 
             #We suggest to do 100 iterations of value function updates
-            mse_loss=torch.nn.MSELoss()
-            for i in range(100):
+            # mse_loss=torch.nn.MSELoss()
+            # for i in range(100):
+
+
+
+
+
                 # Initialize the environment
-                state, ep_ret, ep_len = self.env.reset(), 0, 0
+                # state, ep_ret, ep_len = self.env.reset(), 0, 0
                 #############
 
-                ep_returns = []
-                for t in range(steps_per_epoch):
-                    rews_test = []
-                    states_test = []
-                    a, v, logp = self.ac.step(torch.as_tensor(state, dtype=torch.float32))
-                    next_state, r, terminal = self.env.transition(a.numpy())
-                    ep_ret += r
-                    ep_len += 1
-                    rews_test.append(r)
-                    states_test.append(state)
+                # ep_returns = []
+                # for t in range(steps_per_epoch):
+                    # rews_test = []
+                    # states_test = []
+                    # a, v, logp = self.ac.step(torch.as_tensor(state, dtype=torch.float32))
+                    # next_state, r, terminal = self.env.transition(a.numpy())
+                    # ep_ret += r
+                    # ep_len += 1
+                    # rews_test.append(r)
+                    # states_test.append(state)
+                    #
+                    # # Update state (critical!)
+                    # state = next_state
+                    #
+                    # timeout = ep_len == max_ep_len
+                    # epoch_ended = (t == steps_per_epoch - 1)
+                    #
 
-                    # Update state (critical!)
-                    state = next_state
-
-                    timeout = ep_len == max_ep_len
-                    epoch_ended = (t == steps_per_epoch - 1)
-
-
-                    if terminal or timeout or epoch_ended:
-
-                        v_optimizer.zero_grad()
-                        # if trajectory didn't reach terminal state, bootstrap value target
-                        if epoch_ended:
-                            _, v, _ = self.ac.step(torch.as_tensor(state, dtype=torch.float32))
-                        else:
-                            v = 0
-                        if timeout or terminal:
-                            ep_returns.append(ep_ret)  # only store return when episode ended
-
-
-                        state, ep_ret, ep_len = self.env.reset(), 0, 0
-                        rews_test_disc = discount_cumsum(rews_test, buf.gamma)
-
-                        for i in range(len(states_test)):
-                            _, val_test, _ = self.ac.step(torch.as_tensor(state, dtype=torch.float32))
-
-                            loss_val = mse_loss(val_test, torch.as_tensor(rews_test_disc[i]).float())
-                            loss_val.backward()
-                            v_optimizer.step()
+                    # if terminal or timeout or epoch_ended:
+                    #
+                    #     v_optimizer.zero_grad()
+                    #     # if trajectory didn't reach terminal state, bootstrap value target
+                    #     if epoch_ended:
+                    #         _, v, _ = self.ac.step(torch.as_tensor(state, dtype=torch.float32))
+                    #     else:
+                    #         v = 0
+                    #     if timeout or terminal:
+                    #         ep_returns.append(ep_ret)  # only store return when episode ended
+                    #
+                    #
+                    #     state, ep_ret, ep_len = self.env.reset(), 0, 0
+                    #     rews_test_disc = discount_cumsum(rews_test, buf.gamma)
+                    #
+                    #     for i in range(len(states_test)):
+                    #         _, val_test, _ = self.ac.step(torch.as_tensor(state, dtype=torch.float32))
+                    #
+                    #         loss_val = mse_loss(val_test, torch.as_tensor(rews_test_disc[i]).float())
+                    #         loss_val.backward()
+                    #         v_optimizer.step()
 
 
 
@@ -380,10 +412,10 @@ class Agent:
 
 
 
-                loss=mse_loss(data['ret'][i], buf.values[i]) #data['ret'][i]
-                #compute a loss for the value function, call loss.backwards() and then
-                loss.backward()
-                v_optimizer.step()
+                # loss=mse_loss(data['ret'][i], buf.values[i]) #data['ret'][i]
+                # #compute a loss for the value function, call loss.backwards() and then
+                # loss.backward()
+                # v_optimizer.step()
 
 
         return True
