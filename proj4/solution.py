@@ -10,7 +10,7 @@ import torch
 from torch.optim import Adam
 import torch.nn as nn
 from torch.distributions.categorical import Categorical
-#torch.autograd.set_detect_anomaly(True)
+torch.autograd.set_detect_anomaly(True)
 
 def discount_cumsum(x, discount):
     """
@@ -294,6 +294,9 @@ class Agent:
             mean_return = np.mean(ep_returns) if len(ep_returns) > 0 else np.nan
             print(f"Epoch: {epoch+1}/{epochs}, mean return {mean_return}")
 
+            ############################################################################################################3
+            ######################################################################################################
+
             # This is the end of an epoch, so here is where you likely want to update
             # the policy and / or value function.
             # TODO: Implement the policy and value function update. Hint: some of the torch code is
@@ -323,8 +326,59 @@ class Agent:
             #We suggest to do 100 iterations of value function updates
             mse_loss=torch.nn.MSELoss()
             for i in range(100):
+                # Initialize the environment
+                state, ep_ret, ep_len = self.env.reset(), 0, 0
+                #############
 
-                v_optimizer.zero_grad()
+                ep_returns = []
+                for t in range(steps_per_epoch):
+                    rews_test = []
+                    states_test = []
+                    a, v, logp = self.ac.step(torch.as_tensor(state, dtype=torch.float32))
+                    next_state, r, terminal = self.env.transition(a.numpy())
+                    ep_ret += r
+                    ep_len += 1
+                    rews_test.append(r)
+                    states_test.append(state)
+
+                    # Update state (critical!)
+                    state = next_state
+
+                    timeout = ep_len == max_ep_len
+                    epoch_ended = (t == steps_per_epoch - 1)
+
+
+                    if terminal or timeout or epoch_ended:
+
+                        v_optimizer.zero_grad()
+                        # if trajectory didn't reach terminal state, bootstrap value target
+                        if epoch_ended:
+                            _, v, _ = self.ac.step(torch.as_tensor(state, dtype=torch.float32))
+                        else:
+                            v = 0
+                        if timeout or terminal:
+                            ep_returns.append(ep_ret)  # only store return when episode ended
+
+
+                        state, ep_ret, ep_len = self.env.reset(), 0, 0
+                        rews_test_disc = discount_cumsum(rews_test, buf.gamma)
+
+                        for i in range(len(states_test)):
+                            _, val_test, _ = self.ac.step(torch.as_tensor(state, dtype=torch.float32))
+
+                            loss_val = mse_loss(val_test, torch.as_tensor(rews_test_disc[i]).float())
+                            loss_val.backward()
+                            v_optimizer.step()
+
+
+
+
+
+                #######################################################################
+
+
+
+
 
                 loss=mse_loss(data['ret'][i], buf.values[i]) #data['ret'][i]
                 #compute a loss for the value function, call loss.backwards() and then
