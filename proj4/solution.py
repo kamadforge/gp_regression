@@ -238,9 +238,9 @@ class Agent:
         # Training parameters
         # You may wish to change the following settings for the buffer and training
         # Number of training steps per epoch
-        steps_per_epoch = 300 #
+        steps_per_epoch = 3000 #
         # Number of epochs to train for
-        epochs = 3
+        epochs = 50
         # The longest an episode can go on before cutting it off
         max_ep_len = 300
         # Discount factor for weighting future rewards
@@ -344,6 +344,12 @@ class Agent:
             policy_loss.backward()
             pi_optimizer.step()
 
+            del values_epoch
+            del ep_returns
+            del states_epoch
+            del rewards_epoch
+            del logps_epoch
+
             #Hint: you need to compute a 'loss' such that its derivative with respect to the policy
             #parameters is the policy gradient. Then call loss.backwards() and pi_optimizer.step()
 
@@ -430,7 +436,9 @@ class Agent:
         """
         # TODO: Implement this function.
         # Currently, this just returns a random action.
-
+        #print(type(obs))
+        obs= torch.as_tensor(obs, dtype=torch.float32)
+        #   print(type(obs))
         actions = self.ac.pi(obs)
         c = Categorical(logits=actions[0].logits)
 
@@ -466,19 +474,19 @@ def main():
         terminal = False
         env.reset()
         for t in range(episode_length):
-            if i <= 10:
-                rec.capture_frame()
+            # if i <= 10:
+            #     rec.capture_frame()
             # Taking an action in the environment
-            action = agent.get_action(state)
+            action = agent.get_action(torch.as_tensor(state, dtype=torch.float32))
             state, reward, terminal = env.transition(action)
             cumulative_return += reward
             if terminal:
                 break
         returns.append(cumulative_return)
         print(f"Achieved {cumulative_return:.2f} return.")
-        if i == 10:
-            rec.close()
-            print("Saved video of 10 episodes to 'policy.mp4'.")
+        # if i == 10:
+        #     rec.close()
+        #     print("Saved video of 10 episodes to 'policy.mp4'.")
     env.close()
     print(f"Average return: {np.mean(returns):.2f}")
 
